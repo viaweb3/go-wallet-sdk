@@ -246,28 +246,36 @@ func (tx *Transaction) UnmarshalWithDecoder(decoder *Decoder) (err error) {
 
 type privateKeyGetter func(key PublicKey) *PrivateKey
 
-func (tx *Transaction) Sign(getter privateKeyGetter) (out []Signature, err error) {
+func (tx *Transaction) PartialSign(getter privateKeyGetter) (out []Signature, err error) {
 	messageContent, err := tx.Message.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("unable to encode message for signing: %w", err)
 	}
-
 	signerKeys := tx.Message.signerKeys()
 
+	signedSignatures := []Signature{}
 	for _, key := range signerKeys {
 		privateKey := getter(key)
-		if privateKey == nil {
+		if privateKey != nil {
+			s, err := privateKey.Sign(messageContent)
+			if err != nil {
+				return nil, fmt.Errorf("failed to signed with key %q: %w", key.String(), err)
+			}
+			signedSignatures = append(signedSignatures, s)
+		}
+	}
+	tx.Signatures = append(tx.Signatures, signedSignatures...)
+	return tx.Signatures, nil
+}
+
+func (tx *Transaction) Sign(getter privateKeyGetter) (out []Signature, err error) {
+	signerKeys := tx.Message.signerKeys()
+	for _, key := range signerKeys {
+		if getter(key) == nil {
 			return nil, fmt.Errorf("signer key %q not found. Ensure all the signer keys are in the vault", key.String())
 		}
-
-		s, err := privateKey.Sign(messageContent)
-		if err != nil {
-			return nil, fmt.Errorf("failed to signed with key %q: %w", key.String(), err)
-		}
-
-		tx.Signatures = append(tx.Signatures, s)
 	}
-	return tx.Signatures, nil
+	return tx.PartialSign(getter)
 }
 
 func (tx Transaction) ToBase64() (string, error) {
