@@ -324,7 +324,7 @@ func MultiSignBuild(tx *wire.MsgTx, priKeyList []string) (string, error) {
 	return hex.EncodeToString(buf.Bytes()), nil
 }
 
-func (build *TransactionBuilder) UnSignedTx(pubKeyMap map[int]string) (string, map[int]string, error) {
+func (build *TransactionBuilder) UnSignedTx() (string, map[int]string, error) {
 	if len(build.inputs) == 0 || len(build.outputs) == 0 {
 		return "", nil, fmt.Errorf("input or output miss")
 	}
@@ -334,11 +334,7 @@ func (build *TransactionBuilder) UnSignedTx(pubKeyMap map[int]string) (string, m
 	for i := 0; i < len(build.inputs); i++ {
 		input := build.inputs[i]
 		var signatureScript []byte
-		addPub, err := btcutil.NewAddressPubKey(util.RemoveZeroHex(pubKeyMap[i]), &chaincfg.MainNetParams)
-		if err != nil {
-			return "", nil, err
-		}
-		decodeAddress, err := btcutil.DecodeAddress(addPub.EncodeAddress(), &chaincfg.MainNetParams)
+		decodeAddress, err := btcutil.DecodeAddress(input.address, &chaincfg.MainNetParams)
 		if err != nil {
 			return "", nil, err
 		}
