@@ -334,7 +334,7 @@ func (build *TransactionBuilder) UnSignedTx() (string, map[int]string, error) {
 	for i := 0; i < len(build.inputs); i++ {
 		input := build.inputs[i]
 		var signatureScript []byte
-		decodeAddress, err := btcutil.DecodeAddress(input.address, &chaincfg.MainNetParams)
+		decodeAddress, err := btcutil.DecodeAddress(input.address, build.netParams)
 		if err != nil {
 			return "", nil, err
 		}

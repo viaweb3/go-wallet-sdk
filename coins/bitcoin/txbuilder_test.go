@@ -117,12 +117,19 @@ func TestAddress(t *testing.T) {
 
 func TestUnsignedTx(t *testing.T) {
 	txBuild := NewTxBuild(1, &chaincfg.TestNet3Params)
-	txBuild.AddInput("0b2c23f5c2e6326c90cfa1d3925b0d83f4b08035ca6af8fd8f606385dfbc5822", 1, "", "", "", 0)
-	txBuild.AddOutput("mvNnCR7EJS4aUReLEw2sL2ZtTZh8CAP8Gp", 53000)
-	txBuild.AddOutput("mvNnCR7EJS4aUReLEw2sL2ZtTZh8CAP8Gp", 10000)
 	pubKeyMap := make(map[int]string)
 	pubKeyMap[0] = "022bc0ca1d6aea1c1e523bfcb33f46131bd1a3240aa04f71c34b1a177cfd5ff933"
-	txHex, hashes, err := txBuild.UnSignedTx(pubKeyMap)
+	publicKey, err := hex.DecodeString(pubKeyMap[0])
+	assert.Nil(t, err)
+
+	p2pkh, err := PubKeyToAddr(publicKey, LEGACY, &chaincfg.TestNet3Params)
+	assert.Nil(t, err)
+
+	txBuild.AddInput("0b2c23f5c2e6326c90cfa1d3925b0d83f4b08035ca6af8fd8f606385dfbc5822", 1, "", "", p2pkh, 0)
+	txBuild.AddOutput("mvNnCR7EJS4aUReLEw2sL2ZtTZh8CAP8Gp", 53000)
+	txBuild.AddOutput("mvNnCR7EJS4aUReLEw2sL2ZtTZh8CAP8Gp", 10000)
+
+	txHex, hashes, err := txBuild.UnSignedTx()
 	require.Nil(t, err)
 	signatureMap := make(map[int]string)
 	for i, h := range hashes {
