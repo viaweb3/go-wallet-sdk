@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/btcsuite/btcd v0.22.3
-	github.com/btcsuite/btcd/btcec/v2 v2.2.0
+	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1
 	github.com/ethereum/go-ethereum v1.13.4
 	github.com/okx/go-wallet-sdk/crypto v0.0.2
@@ -25,6 +25,7 @@ require (
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/holiman/uint256 v1.2.3 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
+	github.com/okx/go-wallet-sdk/coins/ethereum v0.0.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/supranational/blst v0.3.11 // indirect
 	github.com/tyler-smith/go-bip32 v1.0.0 // indirect
