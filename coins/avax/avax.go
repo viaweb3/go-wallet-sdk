@@ -68,7 +68,10 @@ func NewTransferTransaction(netWorkId uint32, blockchainId string, inputs *[]Tra
 			return "", err
 		}
 		privateKey, _ := btcec.PrivKeyFromBytes(pk)
-		sig2 := ecdsa.SignCompact(privateKey, hash[:], false)
+		sig2, err := ecdsa.SignCompact(privateKey, hash[:], false)
+		if err != nil {
+			return "", err
+		}
 		sig := make([]byte, len(sig2))
 		copy(sig, sig2[1:])
 		sig[64] = sig2[0] - 27

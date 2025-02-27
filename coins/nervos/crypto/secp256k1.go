@@ -41,7 +41,10 @@ func ZeroBytes(bytes []byte) {
 }
 
 func SignAsRecoverable(value []byte, prvKey *btcec.PrivateKey) *SignatureData {
-	sig := btcec_ecdsa.SignCompact(prvKey, value, false)
+	sig, err := btcec_ecdsa.SignCompact(prvKey, value, false)
+	if err != nil {
+		return nil
+	}
 	V := sig[0]
 	R := sig[1:33]
 	S := sig[33:65]

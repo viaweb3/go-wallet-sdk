@@ -90,7 +90,10 @@ func Sign(rawHex string, privateKey *btcec.PrivateKey) (string, error) {
 		return "", err
 	}
 	hash := sha256.Sum256(signDocBytes)
-	signature := ecdsa.SignCompact(privateKey, hash[:], false)
+	signature, err := ecdsa.SignCompact(privateKey, hash[:], false)
+	if err != nil {
+		return "", err
+	}
 	return hex.EncodeToString(signature[1:]), nil
 }
 

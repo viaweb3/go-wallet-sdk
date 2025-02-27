@@ -169,7 +169,10 @@ func SignMessageEIP1559(message []byte, prvKey *btcec.PrivateKey) (*SignatureDat
 	hash256.Write([]byte{DynamicFeeTxType})
 	hash256.Write(message)
 	messageHash := hash256.Sum(nil)
-	sig := ecdsa.SignCompact(prvKey, messageHash, false)
+	sig, err := ecdsa.SignCompact(prvKey, messageHash, false)
+	if err != nil {
+		return nil, err
+	}
 	V := sig[0] - 27
 	R := sig[1:33]
 	S := sig[33:65]
@@ -248,7 +251,10 @@ func NewTransactionFromRaw(raw string) (*EthTransaction, error) {
 }
 
 func SignAsRecoverable(value []byte, prvKey *btcec.PrivateKey) (*SignatureData, error) {
-	sig := ecdsa.SignCompact(prvKey, value, false)
+	sig, err := ecdsa.SignCompact(prvKey, value, false)
+	if err != nil {
+		return nil, err
+	}
 	V := sig[0]
 	R := sig[1:33]
 	S := sig[33:65]

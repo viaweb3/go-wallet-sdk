@@ -130,7 +130,10 @@ func sign(privateKey, txHex string) (*ec.Signature, *uint8, error) {
 	}
 	sig := ec.Sign(privKey, txBytes)
 
-	sig2 := ec.SignCompact(privKey, txBytes, false)
+	sig2, err := ec.SignCompact(privKey, txBytes, false)
+	if err != nil {
+		return nil, nil, err
+	}
 	v := sig2[0] - 27
 	copy(sig2, sig2[1:])
 	sig2[64] = v

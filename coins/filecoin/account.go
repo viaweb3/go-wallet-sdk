@@ -224,7 +224,10 @@ func SignTx(message *Message, privateKeyHex string) (*SignedMessage, error) {
 	}
 	privateKey, _ := btcec.PrivKeyFromBytes(privKeyBytes)
 
-	sig := ecdsa2.SignCompact(privateKey, message.Hash(), false)
+	sig, err := ecdsa2.SignCompact(privateKey, message.Hash(), false)
+	if err != nil {
+		return nil, err
+	}
 	V := sig[0]
 	R := sig[1:33]
 	S := sig[33:65]
