@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -18,7 +20,6 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/okx/go-wallet-sdk/coins/bitcoin/doginals"
-	"io"
 )
 
 var (
@@ -474,6 +475,155 @@ func GenerateUnsignedPSBTHex(ins []*TxInput, outs []*TxOutput, network *chaincfg
 		return "", err
 	}
 	return hex.EncodeToString(b.Bytes()), nil
+}
+
+func GenerateUnsignedPSBTBase64(ins []*TxInput, outs []*TxOutput, network *chaincfg.Params) (string, error) {
+	if network == nil {
+		network = &chaincfg.MainNetParams
+	}
+	var inputs []*wire.OutPoint
+	var nSequences []uint32
+	for _, in := range ins {
+		txHash, err := chainhash.NewHashFromStr(in.TxId)
+		if err != nil {
+			return "", err
+		}
+		inputs = append(inputs, wire.NewOutPoint(txHash, in.VOut))
+
+		nSequences = append(nSequences, in.Sequence|wire.SequenceLockTimeDisabled)
+	}
+
+	var outputs []*wire.TxOut
+	for _, out := range outs {
+		pkScript, err := AddrToPkScript(out.Address, network)
+		if err != nil {
+			return "", err
+		}
+		outputs = append(outputs, wire.NewTxOut(out.Amount, pkScript))
+	}
+
+	p, err := psbt.New(inputs, outputs, int32(2), uint32(0), nSequences)
+	if err != nil {
+		return "", err
+	}
+
+	updater, err := psbt.NewUpdater(p)
+	if err != nil {
+		return "", err
+	}
+
+	for i, in := range ins {
+		publicKeyBytes, err := hex.DecodeString(in.PublicKey)
+		if err != nil {
+			return "", err
+		}
+		prevPkScript, err := AddrToPkScript(in.Address, network)
+		if err != nil {
+			return "", err
+		}
+
+		// add witnessUtxo
+		witnessUtxo := wire.NewTxOut(in.Amount, prevPkScript)
+		if err := updater.AddInWitnessUtxo(witnessUtxo, i); err != nil {
+			return "", err
+		}
+		// ParseDerivationPath
+		derivationPath, err := accounts.ParseDerivationPath(in.DerivationPath)
+		if err != nil {
+			return "", err
+		}
+
+		if txscript.IsPayToPubKeyHash(prevPkScript) { //legacy
+			// SigHashAll can be used for P2PKH,P2SH,P2WPKH
+			if err := updater.AddInSighashType(txscript.SigHashAll, i); err != nil {
+				return "", err
+			}
+
+			// add bip32Derivation
+			if err := updater.AddInBip32Derivation(in.MasterFingerprint, derivationPath, publicKeyBytes, i); err != nil {
+				return "", err
+			}
+
+			prevTx := wire.NewMsgTx(2)
+			txBytes, err := hex.DecodeString(in.NonWitnessUtxo)
+			if err != nil {
+				return "", err
+			}
+			if err := prevTx.Deserialize(bytes.NewReader(txBytes)); err != nil {
+				return "", err
+			}
+			if err := updater.AddInNonWitnessUtxo(prevTx, i); err != nil {
+				return "", err
+			}
+		} else if txscript.IsPayToTaproot(prevPkScript) { //segwit_taproot
+			//ParsePubKey
+			pub, err := btcec.ParsePubKey(publicKeyBytes)
+			if err != nil {
+				return "", err
+			}
+			//SerializePubKey
+			internalPubKey := schnorr.SerializePubKey(pub)
+			updater.Upsbt.Inputs[i].TaprootInternalKey = internalPubKey
+			// SigHashDefault can be used for P2TR
+			if err := updater.AddInSighashType(txscript.SigHashDefault, i); err != nil {
+				return "", err
+			}
+
+			// Add TaprootBip32Derivation
+			taprootBip32Derivation := psbt.TaprootBip32Derivation{
+				XOnlyPubKey:          internalPubKey,
+				MasterKeyFingerprint: in.MasterFingerprint,
+				Bip32Path:            derivationPath,
+			}
+			// Don't allow duplicate keys
+			for _, x := range updater.Upsbt.Inputs[i].TaprootBip32Derivation {
+				if bytes.Equal(x.XOnlyPubKey, taprootBip32Derivation.XOnlyPubKey) {
+					return "", errors.New("Invalid Psbt due to duplicate key")
+				}
+			}
+			// add taprootBip32Derivation
+			updater.Upsbt.Inputs[i].TaprootBip32Derivation = append(updater.Upsbt.Inputs[i].TaprootBip32Derivation, &taprootBip32Derivation)
+		} else if txscript.IsPayToScriptHash(prevPkScript) { //segwit_nested
+			// SigHashAll can be used for P2PKH,P2SH,P2WPKH
+			if err := updater.AddInSighashType(txscript.SigHashAll, i); err != nil {
+				return "", err
+			}
+			// add bip32Derivation
+			if err := updater.AddInBip32Derivation(in.MasterFingerprint, derivationPath, publicKeyBytes, i); err != nil {
+				return "", err
+			}
+			redeemScript, err := PayToWitnessPubKeyHashScript(btcutil.Hash160(publicKeyBytes))
+			if err != nil {
+				return "", err
+			}
+			if err := updater.AddInRedeemScript(redeemScript, i); err != nil {
+				return "", err
+			}
+
+		}
+	}
+
+	for i, out := range outs {
+		if out.IsChange {
+			derivationPath, err := accounts.ParseDerivationPath(out.DerivationPath)
+			if err != nil {
+				return "", err
+			}
+			publicKeyBytes, err := hex.DecodeString(out.PublicKey)
+			if err != nil {
+				return "", err
+			}
+			if err := updater.AddOutBip32Derivation(out.MasterFingerprint, derivationPath, publicKeyBytes, i); err != nil {
+				return "", err
+			}
+		}
+	}
+
+	b64, err := p.B64Encode()
+	if err != nil {
+		return "", err
+	}
+	return b64, nil
 }
 
 type OutPoint struct {

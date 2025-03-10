@@ -5,12 +5,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"testing"
+
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestDecodePSBTsInputOutputs(t *testing.T) {
@@ -132,6 +133,31 @@ func TestGenerateUnsignedPSBTHex(t *testing.T) {
 	psbtHex, err := GenerateUnsignedPSBTHex(inputs, outputs, network)
 	require.Nil(t, err)
 	require.Equal(t, "70736274ff010053020000000106424462f9b8179b1cdc6229a4e213ff3628060b2a0a7680dae6740405cee34600000000000100008001a08601000000000017a914ef05515a0595d15eaf90d9f62fb85873a6d8c0b4870000000000010120220200000000000017a914ef05515a0595d15eaf90d9f62fb85873a6d8c0b48701041600145c005c5532ce810ddf20f9d1d939631b47089ecd22060357bbb2d4a9cb8a2357633f201b9c518c2795ded682b7913c6beef3fe23bd6d2f18d29f3ff22c000080000000800000008000000000000000000000", psbtHex)
+}
+
+func TestGenerateUnsignedPSBTBase64(t *testing.T) {
+	network := &chaincfg.TestNet3Params
+	var inputs []*TxInput
+	inputs = append(inputs, &TxInput{
+		TxId:              "46e3ce050474e6da80760a2a0b062836ff13e2a42962dc1c9b17b8f962444206",
+		VOut:              uint32(0),
+		Sequence:          1,
+		Amount:            int64(546),
+		Address:           "2NF33rckfiQTiE5Guk5ufUdwms8PgmtnEdc",
+		PrivateKey:        "cPnvkvUYyHcSSS26iD1dkrJdV7k1RoUqJLhn3CYxpo398PdLVE22",
+		MasterFingerprint: 0xF23F9FD2,
+		DerivationPath:    "m/44'/0'/0'/0/0",
+		PublicKey:         "0357bbb2d4a9cb8a2357633f201b9c518c2795ded682b7913c6beef3fe23bd6d2f",
+	})
+
+	var outputs []*TxOutput
+	outputs = append(outputs, &TxOutput{
+		Address: "2NF33rckfiQTiE5Guk5ufUdwms8PgmtnEdc",
+		Amount:  int64(100000),
+	})
+	psbtB64, err := GenerateUnsignedPSBTBase64(inputs, outputs, network)
+	require.Nil(t, err)
+	require.Equal(t, "cHNidP8BAFMCAAAAAQZCRGL5uBebHNxiKaTiE/82KAYLKgp2gNrmdAQFzuNGAAAAAAABAACAAaCGAQAAAAAAF6kU7wVRWgWV0V6vkNn2L7hYc6bYwLSHAAAAAAABASAiAgAAAAAAABepFO8FUVoFldFer5DZ9i+4WHOm2MC0hwEDBAEAAAABBBYAFFwAXFUyzoEN3yD50dk5YxtHCJ7NIgYDV7uy1KnLiiNXYz8gG5xRjCeV3taCt5E8a+7z/iO9bS8Y0p8/8iwAAIAAAACAAAAAgAAAAAAAAAAAAAA=", psbtB64)
 }
 
 func TestExtractTxFromSignedPSBT(t *testing.T) {
