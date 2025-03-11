@@ -522,11 +522,6 @@ func GenerateUnsignedPSBTBase64(ins []*TxInput, outs []*TxOutput, network *chain
 			return "", err
 		}
 
-		// add witnessUtxo
-		witnessUtxo := wire.NewTxOut(in.Amount, prevPkScript)
-		if err := updater.AddInWitnessUtxo(witnessUtxo, i); err != nil {
-			return "", err
-		}
 		// ParseDerivationPath
 		derivationPath, err := accounts.ParseDerivationPath(in.DerivationPath)
 		if err != nil {
@@ -574,6 +569,7 @@ func GenerateUnsignedPSBTBase64(ins []*TxInput, outs []*TxOutput, network *chain
 				XOnlyPubKey:          internalPubKey,
 				MasterKeyFingerprint: in.MasterFingerprint,
 				Bip32Path:            derivationPath,
+				LeafHashes:           [][]byte{},
 			}
 			// Don't allow duplicate keys
 			for _, x := range updater.Upsbt.Inputs[i].TaprootBip32Derivation {
@@ -583,7 +579,12 @@ func GenerateUnsignedPSBTBase64(ins []*TxInput, outs []*TxOutput, network *chain
 			}
 			// add taprootBip32Derivation
 			updater.Upsbt.Inputs[i].TaprootBip32Derivation = append(updater.Upsbt.Inputs[i].TaprootBip32Derivation, &taprootBip32Derivation)
-		} else if txscript.IsPayToScriptHash(prevPkScript) { //segwit_nested
+		} else { //others: segwit_native and segwit_nested
+			// add witnessUtxo
+			witnessUtxo := wire.NewTxOut(in.Amount, prevPkScript)
+			if err := updater.AddInWitnessUtxo(witnessUtxo, i); err != nil {
+				return "", err
+			}
 			// SigHashAll can be used for P2PKH,P2SH,P2WPKH
 			if err := updater.AddInSighashType(txscript.SigHashAll, i); err != nil {
 				return "", err
@@ -592,14 +593,15 @@ func GenerateUnsignedPSBTBase64(ins []*TxInput, outs []*TxOutput, network *chain
 			if err := updater.AddInBip32Derivation(in.MasterFingerprint, derivationPath, publicKeyBytes, i); err != nil {
 				return "", err
 			}
-			redeemScript, err := PayToWitnessPubKeyHashScript(btcutil.Hash160(publicKeyBytes))
-			if err != nil {
-				return "", err
+			if txscript.IsPayToScriptHash(prevPkScript) { //segwit_nested
+				redeemScript, err := PayToWitnessPubKeyHashScript(btcutil.Hash160(publicKeyBytes))
+				if err != nil {
+					return "", err
+				}
+				if err := updater.AddInRedeemScript(redeemScript, i); err != nil {
+					return "", err
+				}
 			}
-			if err := updater.AddInRedeemScript(redeemScript, i); err != nil {
-				return "", err
-			}
-
 		}
 	}
 
