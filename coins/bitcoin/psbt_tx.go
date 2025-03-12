@@ -489,8 +489,11 @@ func GenerateUnsignedPSBTBase64(ins []*TxInput, outs []*TxOutput, network *chain
 			return "", err
 		}
 		inputs = append(inputs, wire.NewOutPoint(txHash, in.VOut))
-
-		nSequences = append(nSequences, in.Sequence|wire.SequenceLockTimeDisabled)
+		seq := in.Sequence
+		if seq == 0 {
+			seq = wire.SequenceLockTimeDisabled
+		}
+		nSequences = append(nSequences, seq)
 	}
 
 	var outputs []*wire.TxOut
@@ -528,17 +531,7 @@ func GenerateUnsignedPSBTBase64(ins []*TxInput, outs []*TxOutput, network *chain
 			return "", err
 		}
 
-		if txscript.IsPayToPubKeyHash(prevPkScript) { //legacy
-			// SigHashAll can be used for P2PKH,P2SH,P2WPKH
-			if err := updater.AddInSighashType(txscript.SigHashAll, i); err != nil {
-				return "", err
-			}
-
-			// add bip32Derivation
-			if err := updater.AddInBip32Derivation(in.MasterFingerprint, derivationPath, publicKeyBytes, i); err != nil {
-				return "", err
-			}
-
+		if txscript.IsPayToPubKeyHash(prevPkScript) || (txscript.IsPayToScriptHash(prevPkScript) && !txscript.IsPayToWitnessPubKeyHash(prevPkScript)) {
 			prevTx := wire.NewMsgTx(2)
 			txBytes, err := hex.DecodeString(in.NonWitnessUtxo)
 			if err != nil {
@@ -550,41 +543,19 @@ func GenerateUnsignedPSBTBase64(ins []*TxInput, outs []*TxOutput, network *chain
 			if err := updater.AddInNonWitnessUtxo(prevTx, i); err != nil {
 				return "", err
 			}
-		} else if txscript.IsPayToTaproot(prevPkScript) { //segwit_taproot
-			//ParsePubKey
-			pub, err := btcec.ParsePubKey(publicKeyBytes)
-			if err != nil {
-				return "", err
-			}
-			//SerializePubKey
-			internalPubKey := schnorr.SerializePubKey(pub)
-			updater.Upsbt.Inputs[i].TaprootInternalKey = internalPubKey
-			// SigHashDefault can be used for P2TR
-			if err := updater.AddInSighashType(txscript.SigHashDefault, i); err != nil {
-				return "", err
-			}
-
-			// Add TaprootBip32Derivation
-			taprootBip32Derivation := psbt.TaprootBip32Derivation{
-				XOnlyPubKey:          internalPubKey,
-				MasterKeyFingerprint: in.MasterFingerprint,
-				Bip32Path:            derivationPath,
-				LeafHashes:           [][]byte{},
-			}
-			// Don't allow duplicate keys
-			for _, x := range updater.Upsbt.Inputs[i].TaprootBip32Derivation {
-				if bytes.Equal(x.XOnlyPubKey, taprootBip32Derivation.XOnlyPubKey) {
-					return "", errors.New("Invalid Psbt due to duplicate key")
-				}
-			}
-			// add taprootBip32Derivation
-			updater.Upsbt.Inputs[i].TaprootBip32Derivation = append(updater.Upsbt.Inputs[i].TaprootBip32Derivation, &taprootBip32Derivation)
-		} else { //others: segwit_native and segwit_nested
-			// add witnessUtxo
+		} else {
 			witnessUtxo := wire.NewTxOut(in.Amount, prevPkScript)
 			if err := updater.AddInWitnessUtxo(witnessUtxo, i); err != nil {
 				return "", err
 			}
+		}
+
+		if txscript.IsPayToTaproot(prevPkScript) {
+			// SigHashDefault can be used for P2TR
+			if err := updater.AddInSighashType(txscript.SigHashDefault, i); err != nil {
+				return "", err
+			}
+		} else {
 			// SigHashAll can be used for P2PKH,P2SH,P2WPKH
 			if err := updater.AddInSighashType(txscript.SigHashAll, i); err != nil {
 				return "", err
@@ -593,15 +564,59 @@ func GenerateUnsignedPSBTBase64(ins []*TxInput, outs []*TxOutput, network *chain
 			if err := updater.AddInBip32Derivation(in.MasterFingerprint, derivationPath, publicKeyBytes, i); err != nil {
 				return "", err
 			}
-			if txscript.IsPayToScriptHash(prevPkScript) { //segwit_nested
-				redeemScript, err := PayToWitnessPubKeyHashScript(btcutil.Hash160(publicKeyBytes))
-				if err != nil {
-					return "", err
-				}
-				if err := updater.AddInRedeemScript(redeemScript, i); err != nil {
-					return "", err
+		}
+
+		if txscript.IsPayToScriptHash(prevPkScript) {
+			addr, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(publicKeyBytes), network)
+			if err != nil {
+				return "", err
+			}
+			redeemScript, err := txscript.PayToAddrScript(addr)
+			if err != nil {
+				return "", err
+			}
+			if err := updater.AddInRedeemScript(redeemScript, i); err != nil {
+				return "", err
+			}
+		}
+
+		if txscript.IsPayToTaproot(prevPkScript) {
+			//ParsePubKey
+			pub, err := btcec.ParsePubKey(publicKeyBytes)
+			if err != nil {
+				return "", err
+			}
+			//SerializePubKey
+			internalPubKey := schnorr.SerializePubKey(pub)
+			updater.Upsbt.Inputs[i].TaprootInternalKey = internalPubKey
+
+			// Add TaprootBip32Derivation
+			taprootBip32Derivation := psbt.TaprootBip32Derivation{
+				XOnlyPubKey:          internalPubKey,
+				MasterKeyFingerprint: in.MasterFingerprint,
+				Bip32Path:            derivationPath,
+				LeafHashes:           nil,
+			}
+
+			// add taprootBip32Derivation
+			if updater.Upsbt.Inputs[i].TaprootBip32Derivation == nil {
+				updater.Upsbt.Inputs[i].TaprootBip32Derivation = []*psbt.TaprootBip32Derivation{}
+			}
+
+			skip := false
+			for _, x := range updater.Upsbt.Inputs[i].TaprootBip32Derivation {
+				if bytes.Equal(x.XOnlyPubKey, taprootBip32Derivation.XOnlyPubKey) {
+					skip = true
+					break
 				}
 			}
+			if !skip {
+				updater.Upsbt.Inputs[i].TaprootBip32Derivation = append(
+					updater.Upsbt.Inputs[i].TaprootBip32Derivation,
+					&taprootBip32Derivation,
+				)
+			}
+
 		}
 	}
 
