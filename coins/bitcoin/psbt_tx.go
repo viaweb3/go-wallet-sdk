@@ -531,7 +531,7 @@ func GenerateUnsignedPSBTBase64(ins []*TxInput, outs []*TxOutput, network *chain
 			return "", err
 		}
 
-		if txscript.IsPayToPubKeyHash(prevPkScript) || (txscript.IsPayToScriptHash(prevPkScript) && !txscript.IsPayToWitnessPubKeyHash(prevPkScript)) {
+		if txscript.IsPayToPubKeyHash(prevPkScript) || txscript.IsPayToScriptHash(prevPkScript) || txscript.IsPayToWitnessPubKeyHash(prevPkScript) {
 			prevTx := wire.NewMsgTx(2)
 			txBytes, err := hex.DecodeString(in.NonWitnessUtxo)
 			if err != nil {
@@ -543,7 +543,8 @@ func GenerateUnsignedPSBTBase64(ins []*TxInput, outs []*TxOutput, network *chain
 			if err := updater.AddInNonWitnessUtxo(prevTx, i); err != nil {
 				return "", err
 			}
-		} else {
+		}
+		if !txscript.IsPayToPubKeyHash(prevPkScript) {
 			witnessUtxo := wire.NewTxOut(in.Amount, prevPkScript)
 			if err := updater.AddInWitnessUtxo(witnessUtxo, i); err != nil {
 				return "", err
