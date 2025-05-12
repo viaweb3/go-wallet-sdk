@@ -65,6 +65,9 @@ func GetNetWork() []byte {
 
 func ParseTxStr(txStr string) (pb.Transaction, error) {
 	bytes, err := hex.DecodeString(txStr)
+	if err != nil {
+		return pb.Transaction{}, err
+	}
 	var trans pb.Transaction
 	err = proto.Unmarshal(bytes, &trans)
 	if err != nil {
@@ -211,6 +214,167 @@ func NewTRC20TokenTransfer(fromAddress string, toAddress string, contractAddress
 	raw.Contract = []*pb.Transaction_Contract{contract}
 	trans := pb.Transaction{RawData: raw}
 	data, err := proto.Marshal(&trans)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(data), nil
+}
+
+// create a TRC10 transfer transaction
+func NewTRC10Transfer(fromAddress string, toAddress string, tokenId string, amount int64, refBlockBytes string, refBlockHash string, expiration int64, timestamp int64) (string, error) {
+	owner, err := GetAddressHash(fromAddress)
+	if err != nil {
+		return "", err
+	}
+	to, err := GetAddressHash(toAddress)
+	if err != nil {
+		return "", err
+	}
+	transferContract := &pb.TransferAssetContract{AssetName: []byte(tokenId), OwnerAddress: owner, ToAddress: to, Amount: amount}
+	param, err := ptypes.MarshalAny(transferContract)
+	if err != nil {
+		return "", err
+	}
+	contract := &pb.Transaction_Contract{Type: pb.Transaction_Contract_TransferContract, Parameter: param}
+	raw := new(pb.TransactionRaw)
+	refBytes, err := hex.DecodeString(refBlockBytes)
+	if err != nil {
+		return "", err
+	}
+	raw.RefBlockBytes = refBytes
+	refHash, err := hex.DecodeString(refBlockHash)
+	if err != nil {
+		return "", err
+	}
+	raw.RefBlockHash = refHash
+	raw.Expiration = expiration
+	raw.Timestamp = timestamp
+	raw.Contract = []*pb.Transaction_Contract{contract}
+	trans := pb.Transaction{RawData: raw}
+	data, err := proto.Marshal(&trans)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(data), nil
+}
+
+// create a TRX transfer transaction for Hardware
+func NewHardwareTransfer(fromAddress string, toAddress string, amount int64, refBlockBytes string, refBlockHash string, expiration int64, timestamp int64) (string, error) {
+	owner, err := GetAddressHash(fromAddress)
+	if err != nil {
+		return "", err
+	}
+	to, err := GetAddressHash(toAddress)
+	if err != nil {
+		return "", err
+	}
+	transferContract := &pb.TransferContract{OwnerAddress: owner, ToAddress: to, Amount: amount}
+	param, err := ptypes.MarshalAny(transferContract)
+	if err != nil {
+		return "", err
+	}
+	contract := &pb.Transaction_Contract{Type: pb.Transaction_Contract_TransferContract, Parameter: param}
+	raw := new(pb.TransactionRaw)
+	refBytes, err := hex.DecodeString(refBlockBytes)
+	if err != nil {
+		return "", err
+	}
+	raw.RefBlockBytes = refBytes
+	refHash, err := hex.DecodeString(refBlockHash)
+	if err != nil {
+		return "", err
+	}
+	raw.RefBlockHash = refHash
+	raw.Expiration = expiration
+	raw.Timestamp = timestamp
+	raw.Contract = []*pb.Transaction_Contract{contract}
+	data, err := proto.Marshal(raw)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(data), nil
+}
+
+// create a TRC10 transfer transaction for Hardware
+func NewHardwareTRC10Transfer(fromAddress string, toAddress string, tokenId string, amount int64, refBlockBytes string, refBlockHash string, expiration int64, timestamp int64) (string, error) {
+	owner, err := GetAddressHash(fromAddress)
+	if err != nil {
+		return "", err
+	}
+	to, err := GetAddressHash(toAddress)
+	if err != nil {
+		return "", err
+	}
+	transferContract := &pb.TransferAssetContract{AssetName: []byte(tokenId), OwnerAddress: owner, ToAddress: to, Amount: amount}
+	param, err := ptypes.MarshalAny(transferContract)
+	if err != nil {
+		return "", err
+	}
+	contract := &pb.Transaction_Contract{Type: pb.Transaction_Contract_TransferContract, Parameter: param}
+	raw := new(pb.TransactionRaw)
+	refBytes, err := hex.DecodeString(refBlockBytes)
+	if err != nil {
+		return "", err
+	}
+	raw.RefBlockBytes = refBytes
+	refHash, err := hex.DecodeString(refBlockHash)
+	if err != nil {
+		return "", err
+	}
+	raw.RefBlockHash = refHash
+	raw.Expiration = expiration
+	raw.Timestamp = timestamp
+	raw.Contract = []*pb.Transaction_Contract{contract}
+	data, err := proto.Marshal(raw)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(data), nil
+}
+
+// create a TRC20 transfer transaction for Hardware
+func NewHardwareTRC20TokenTransfer(fromAddress string, toAddress string, contractAddress string, amount *big.Int, feeLimit int64, refBlockBytes string, refBlockHash string, expiration int64, timestamp int64) (string, error) {
+	raw := new(pb.TransactionRaw)
+	refBytes, err := hex.DecodeString(refBlockBytes)
+	if err != nil {
+		return "", err
+	}
+	raw.RefBlockBytes = refBytes
+	refHash, err := hex.DecodeString(refBlockHash)
+	if err != nil {
+		return "", err
+	}
+	raw.RefBlockHash = refHash
+	raw.Expiration = expiration
+	raw.Timestamp = timestamp
+
+	fromAddressHash, err := GetAddressHash(fromAddress)
+	if err != nil {
+		return "", err
+	}
+	toAddressHash, err := GetAddressHash(toAddress)
+	if err != nil {
+		return "", err
+	}
+	contractAddressHash, err := GetAddressHash(contractAddress)
+	if err != nil {
+		return "", err
+	}
+	input, err := token.Transfer(hex.EncodeToString(toAddressHash), amount)
+	if err != nil {
+		return "", err
+	}
+	transferContract := &pb.TriggerSmartContract{OwnerAddress: fromAddressHash, ContractAddress: contractAddressHash, CallValue: 0, CallTokenValue: 0, Data: input}
+	param, err := ptypes.MarshalAny(transferContract)
+	if err != nil {
+		return "", err
+	}
+
+	contract := &pb.Transaction_Contract{Type: pb.Transaction_Contract_TriggerSmartContract, Parameter: param}
+	raw.FeeLimit = feeLimit
+
+	raw.Contract = []*pb.Transaction_Contract{contract}
+	data, err := proto.Marshal(raw)
 	if err != nil {
 		return "", err
 	}
