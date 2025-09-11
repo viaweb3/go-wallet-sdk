@@ -19,6 +19,7 @@ package base
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 )
 
@@ -41,8 +42,17 @@ type MessageAddressTableLookupSlice []MessageAddressTableLookup
 func (lookups MessageAddressTableLookupSlice) NumLookups() int {
 	count := 0
 	for _, lookup := range lookups {
-		// TODO: check if this is correct.
 		count += len(lookup.ReadonlyIndexes)
+		count += len(lookup.WritableIndexes)
+	}
+	return count
+}
+
+// NumWritableLookups returns the number of writable accounts
+// across all the lookups (all the address tables).
+func (lookups MessageAddressTableLookupSlice) NumWritableLookups() int {
+	count := 0
+	for _, lookup := range lookups {
 		count += len(lookup.WritableIndexes)
 	}
 	return count
@@ -61,9 +71,21 @@ func (lookups MessageAddressTableLookupSlice) GetTableIDs() PublicKeySlice {
 }
 
 type MessageAddressTableLookup struct {
-	AccountKey      PublicKey // The account key of the address table.
-	WritableIndexes []uint8
-	ReadonlyIndexes []uint8
+	AccountKey      PublicKey       `json:"accountKey"` // The account key of the address table.
+	WritableIndexes Uint8SliceAsNum `json:"writableIndexes"`
+	ReadonlyIndexes Uint8SliceAsNum `json:"readonlyIndexes"`
+}
+
+// Uint8SliceAsNum is a slice of uint8s that can be marshaled as numbers instead of a byte slice.
+type Uint8SliceAsNum []uint8
+
+// MarshalJSON implements json.Marshaler.
+func (slice Uint8SliceAsNum) MarshalJSON() ([]byte, error) {
+	out := make([]uint16, len(slice))
+	for i, idx := range slice {
+		out[i] = uint16(idx)
+	}
+	return json.Marshal(out)
 }
 
 type Message struct {
